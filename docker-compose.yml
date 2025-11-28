@@ -9,7 +9,7 @@ services:
       - .env
     volumes:
       - ./database:/app/database
-      - ./discord.log:/app/discord.log
+      - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
     networks:

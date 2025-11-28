@@ -34,7 +34,8 @@ class LoggingFormatter(logging.Formatter):
         format_str = format_str.replace("(reset)", self.reset)
         format_str = format_str.replace("(levelcolor)", log_color)
         format_str = format_str.replace("(green)", self.green + self.bold)
-        formatter = logging.Formatter(format_str, "%Y-%m-%d %H:%M:%S", style="{")
+        formatter = logging.Formatter(
+            format_str, "%Y-%m-%d %H:%M:%S", style="{")
         return formatter.format(record)
 
 
@@ -57,7 +58,8 @@ def setup_logger(name: str = "discord_bot", level: int = logging.INFO) -> loggin
     console_handler.setFormatter(LoggingFormatter())
 
     # File handler
-    file_handler = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
+    file_handler = logging.FileHandler(
+        filename="logs/discord.log", encoding="utf-8", mode="w")
     file_handler_formatter = logging.Formatter(
         "[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{"
     )
