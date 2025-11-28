@@ -1,0 +1,8 @@
+discord.py==2.6.3
+python-dotenv
+aiohttp
+SpeechRecognition
+pydub
+ffmpeg-python
+requests
+pyjwt
