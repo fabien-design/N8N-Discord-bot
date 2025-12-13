@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from utils import TOKEN, PREFIX, ENABLE_MESSAGE_CONTENT, ALLOWED_USER_IDS, JWT_SECRET, N8N_WEBHOOK
-from utils import setup_logger, transcribe_audio_from_url
+from utils import setup_logger, transcribe_audio_from_url, send_long_response
 
 logger = setup_logger()
 
@@ -107,7 +107,7 @@ class DiscordBot(commands.Bot):
                             if response and response.status_code == 200:
                                 self.logger.info("Webhook call successful, formatting response...")
                                 formatted_message = self._format_webhook_response(response)
-                                await message.channel.send(formatted_message)
+                                await send_long_response(message.channel, formatted_message)
                                 self.logger.info("Response sent to Discord")
                             else:
                                 status = response.status_code if response else "None"
@@ -142,7 +142,7 @@ class DiscordBot(commands.Bot):
                 self.logger.debug(f"Response content: {response.text[:200]}")
 
                 formatted_message = self._format_webhook_response(response)
-                await message.channel.send(formatted_message)
+                await send_long_response(message.channel, formatted_message)
                 self.logger.info("Response sent to Discord")
             else:
                 status = response.status_code if response else "None"
