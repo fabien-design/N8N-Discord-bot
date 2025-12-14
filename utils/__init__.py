@@ -6,6 +6,7 @@ from .config import TOKEN, PREFIX, ENABLE_MESSAGE_CONTENT, ALLOWED_USER_IDS, JWT
 from .logger_config import setup_logger
 from .audio_transcription import transcribe_audio_from_url
 from .discord_response_handler import send_long_response
+from .file_converter import get_file_info_for_n8n
 
 __all__ = [
     'TOKEN',
@@ -17,4 +18,5 @@ __all__ = [
     'setup_logger',
     'transcribe_audio_from_url',
     'send_long_response',
+    'get_file_info_for_n8n',
 ]
