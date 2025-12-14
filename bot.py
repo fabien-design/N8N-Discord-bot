@@ -12,6 +12,7 @@ import json
 import base64
 import aiohttp
 from datetime import datetime, timedelta, timezone
+import io
 
 from utils import TOKEN, PREFIX, ENABLE_MESSAGE_CONTENT, ALLOWED_USER_IDS, JWT_SECRET, N8N_WEBHOOK
 from utils import setup_logger, transcribe_audio_from_url, send_long_response, get_file_info_for_n8n
@@ -39,7 +40,8 @@ class DiscordBot(commands.Bot):
         self.logger.info(f"Logged in as {self.user.name}")
         self.logger.info(f"discord.py API version: {discord.__version__}")
         self.logger.info(f"Python version: {platform.python_version()}")
-        self.logger.info(f"Running on: {platform.system()} {platform.release()}")
+        self.logger.info(
+            f"Running on: {platform.system()} {platform.release()}")
         self.logger.info("-------------------")
         self.logger.info("Bot is ready to listen to messages!")
 
@@ -49,31 +51,38 @@ class DiscordBot(commands.Bot):
         """
         try:
             if message.author == self.user or message.author.bot:
-                self.logger.debug(f"Ignoring message from bot/self: {message.author}")
+                self.logger.debug(
+                    f"Ignoring message from bot/self: {message.author}")
                 return
 
-            self.logger.info(f"Received message from {message.author} (ID: {message.author.id})")
+            self.logger.info(
+                f"Received message from {message.author} (ID: {message.author.id})")
 
             if ALLOWED_USER_IDS:
-                allowed_ids = [int(uid.strip()) for uid in ALLOWED_USER_IDS.split(",")]
+                allowed_ids = [int(uid.strip())
+                               for uid in ALLOWED_USER_IDS.split(",")]
                 self.logger.debug(f"Allowed user IDs: {allowed_ids}")
 
                 if message.author.id not in allowed_ids:
-                    self.logger.warning(f"Unauthorized user {message.author} (ID: {message.author.id}) attempted to interact.")
+                    self.logger.warning(
+                        f"Unauthorized user {message.author} (ID: {message.author.id}) attempted to interact.")
                     return
                 else:
                     self.logger.info(f"User {message.author.id} is authorized")
 
             if message.attachments:
-                self.logger.info(f"Message has {len(message.attachments)} attachment(s)")
+                self.logger.info(
+                    f"Message has {len(message.attachments)} attachment(s)")
                 await self._handle_attachments(message)
                 return
 
             if message.content:
-                self.logger.info(f"Processing text message: {message.content[:50]}...")
+                self.logger.info(
+                    f"Processing text message: {message.content[:50]}...")
                 await self._handle_text_message(message)
             else:
-                self.logger.warning("Message has no content and no attachments")
+                self.logger.warning(
+                    "Message has no content and no attachments")
 
         except Exception as e:
             self.logger.error(f"Error in on_message: {e}", exc_info=True)
@@ -88,7 +97,8 @@ class DiscordBot(commands.Bot):
         """
         try:
             for attachment in message.attachments:
-                self.logger.info(f"Processing attachment: {attachment.filename} (type: {attachment.content_type})")
+                self.logger.info(
+                    f"Processing attachment: {attachment.filename} (type: {attachment.content_type})")
 
                 # Handle audio files (transcription)
                 if attachment.content_type and attachment.content_type.startswith('audio/'):
@@ -99,14 +109,16 @@ class DiscordBot(commands.Bot):
                     await self._handle_file_attachment(message, attachment)
 
         except Exception as e:
-            self.logger.error(f"Error in _handle_attachments: {e}", exc_info=True)
+            self.logger.error(
+                f"Error in _handle_attachments: {e}", exc_info=True)
             await message.channel.send(f"❌ Erreur lors du traitement de la pièce jointe: {str(e)}")
 
     async def _handle_audio_attachment(self, message: discord.Message, attachment: discord.Attachment) -> None:
         """
         Process audio attachment and transcribe it.
         """
-        self.logger.info(f"Audio attachment detected from {message.author}: {attachment.url}")
+        self.logger.info(
+            f"Audio attachment detected from {message.author}: {attachment.url}")
         processing_msg = await message.channel.send("🎤 Transcription en cours...")
 
         try:
@@ -121,27 +133,46 @@ class DiscordBot(commands.Bot):
                 response = await self._call_webhook(transcription, user_id=message.author.id, username=str(message.author))
 
                 if response and response.status_code == 200:
-                    self.logger.info("Webhook call successful, formatting response...")
-                    formatted_message = self._format_webhook_response(response)
-                    await send_long_response(message.channel, formatted_message)
-                    self.logger.info("Response sent to Discord")
+                    self.logger.info(
+                        "Webhook call successful, formatting response...")
+                    result = self._format_webhook_response(response)
+
+                    if (isinstance(result, dict) and result.get('type') == 'audio'):
+                        audio_bytes = base64.b64decode(result.get('data'))
+
+                        self.logger.info(
+                            "Sending audio response to Discord...")
+                        discord_file = discord.File(
+                            fp=io.BytesIO(audio_bytes),
+                            filename=result.get(
+                                'filename', 'response_audio.wav')
+                        )
+                        await message.channel.send(
+                            content="🎵 Voici la réponse TTS :", file=discord_file)
+                        self.logger.info("Audio response sent to Discord")
+                    else:
+                        await send_long_response(message.channel, result)
+                        self.logger.info("Response sent to Discord")
                 else:
                     status = response.status_code if response else "None"
-                    self.logger.error(f"Webhook call failed with status: {status}")
+                    self.logger.error(
+                        f"Webhook call failed with status: {status}")
                     await message.channel.send(f"❌ Erreur lors de l'envoi au webhook (status: {status})")
             else:
                 self.logger.error("Transcription returned empty/None")
                 await processing_msg.edit(content="❌ Erreur lors de la transcription")
 
         except Exception as e:
-            self.logger.error(f"Error during audio processing: {e}", exc_info=True)
+            self.logger.error(
+                f"Error during audio processing: {e}", exc_info=True)
             await processing_msg.edit(content=f"❌ Erreur: {str(e)}")
 
     async def _handle_file_attachment(self, message: discord.Message, attachment: discord.Attachment) -> None:
         """
         Process file attachment (documents, images, PDFs) for RAG.
         """
-        self.logger.info(f"File attachment detected: {attachment.filename} ({attachment.size} bytes)")
+        self.logger.info(
+            f"File attachment detected: {attachment.filename} ({attachment.size} bytes)")
 
         # Check file size (limit to 10MB)
         max_size = 10 * 1024 * 1024  # 10MB
@@ -231,23 +262,39 @@ class DiscordBot(commands.Bot):
                 if response.status == 200:
                     return await response.read()
                 else:
-                    raise Exception(f"Failed to download file: {response.status}")
+                    raise Exception(
+                        f"Failed to download file: {response.status}")
 
     async def _handle_text_message(self, message: discord.Message) -> None:
         """Handle text messages and send to webhook."""
         try:
-            self.logger.info(f"Text message from {message.author}: {message.content}")
+            self.logger.info(
+                f"Text message from {message.author}: {message.content}")
             self.logger.info("Sending text message to webhook...")
 
             response = await self._call_webhook(message.content, user_id=message.author.id, username=str(message.author))
 
             if response and response.status_code == 200:
-                self.logger.info(f"Webhook response received: {response.status_code}")
+                self.logger.info(
+                    f"Webhook response received: {response.status_code}")
                 self.logger.debug(f"Response content: {response.text[:200]}")
 
-                formatted_message = self._format_webhook_response(response)
-                await send_long_response(message.channel, formatted_message)
-                self.logger.info("Response sent to Discord")
+                result = self._format_webhook_response(response)
+
+                if (isinstance(result, dict) and result.get('type') == 'audio'):
+                    audio_bytes = base64.b64decode(result.get('data'))
+
+                    self.logger.info("Sending audio response to Discord...")
+                    discord_file = discord.File(
+                        fp=io.BytesIO(audio_bytes),
+                        filename=result.get('filename', 'response_audio.wav')
+                    )
+                    await message.channel.send(
+                        content="🎵 Voici la réponse TTS :", file=discord_file)
+                    self.logger.info("Audio response sent to Discord")
+                else:
+                    await send_long_response(message.channel, result)
+                    self.logger.info("Response sent to Discord")
             else:
                 status = response.status_code if response else "None"
                 self.logger.error(f"Webhook call failed with status: {status}")
@@ -256,7 +303,8 @@ class DiscordBot(commands.Bot):
                 await message.channel.send(f"❌ Erreur lors de l'envoi au webhook (status: {status})")
 
         except Exception as e:
-            self.logger.error(f"Error in _handle_text_message: {e}", exc_info=True)
+            self.logger.error(
+                f"Error in _handle_text_message: {e}", exc_info=True)
             await message.channel.send(f"❌ Erreur lors du traitement du message: {str(e)}")
 
     def _format_webhook_response(self, response) -> str:
@@ -267,6 +315,19 @@ class DiscordBot(commands.Bot):
         try:
             data = response.json()
             self.logger.debug(f"Parsing webhook response, type: {type(data)}")
+
+            # N8N may return either a dict or a list. If the response (or the
+            # first item of the list) is an audio payload, return that audio
+            # dict directly so callers can decode and send the audio file.
+            if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and data[0].get('type') == 'audio':
+                self.logger.info(
+                    "Response indicates audio type (list), returning first item")
+                return data[0]
+
+            if isinstance(data, dict) and data.get('type') == 'audio':
+                self.logger.info(
+                    "Response indicates audio type (dict), returning it")
+                return data
 
             # Handle list response (N8N can return arrays)
             if isinstance(data, list):
@@ -294,7 +355,8 @@ class DiscordBot(commands.Bot):
             content = output.get('content', '')
             items = output.get('items', [])
 
-            self.logger.debug(f"Output type: {output_type}, Content length: {len(content) if content else 0}, Items: {len(items)}")
+            self.logger.debug(
+                f"Output type: {output_type}, Content length: {len(content) if content else 0}, Items: {len(items)}")
 
             # Map actions to emojis
             action_emojis = {
@@ -372,7 +434,8 @@ class DiscordBot(commands.Bot):
                 formatted += f"   📅 {self._format_date(date_str)}\n"
 
             if preview:
-                preview_text = preview[:100] + '...' if len(preview) > 100 else preview
+                preview_text = preview[:100] + \
+                    '...' if len(preview) > 100 else preview
                 formatted += f"   💬 {preview_text}\n"
 
             formatted += "\n"
@@ -399,7 +462,8 @@ class DiscordBot(commands.Bot):
             if location:
                 formatted += f"   📍 Lieu: {location}\n"
             if description:
-                desc_text = description[:100] + '...' if len(description) > 100 else description
+                desc_text = description[:100] + \
+                    '...' if len(description) > 100 else description
                 formatted += f"   📄 {desc_text}\n"
 
             formatted += "\n"
@@ -467,7 +531,8 @@ class DiscordBot(commands.Bot):
             if isinstance(item, str):
                 formatted += f"**{idx}.** {item}\n"
             elif isinstance(item, dict):
-                title = item.get('title', item.get('name', item.get('text', str(item))))
+                title = item.get('title', item.get(
+                    'name', item.get('text', str(item))))
                 formatted += f"**{idx}.** {title}\n"
 
                 for key, value in item.items():
@@ -511,14 +576,16 @@ class DiscordBot(commands.Bot):
             # Add file attachment if present
             if file_attachment:
                 data['file'] = file_attachment
-                self.logger.info(f"User {username} ({user_id}) sent file: {file_attachment['filename']} ({file_attachment['size']} bytes)")
+                self.logger.info(
+                    f"User {username} ({user_id}) sent file: {file_attachment['filename']} ({file_attachment['size']} bytes)")
             else:
                 self.logger.info(f"User {username} ({user_id}): {message}")
 
             self.logger.info(f"Sending to N8N webhook: {N8N_WEBHOOK}")
             response = requests.post(N8N_WEBHOOK, json=data, headers=headers)
 
-            self.logger.info(f"Webhook response status: {response.status_code}")
+            self.logger.info(
+                f"Webhook response status: {response.status_code}")
             return response
         except Exception as e:
             self.logger.error(f"Error calling webhook: {e}")
