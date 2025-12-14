@@ -313,6 +313,22 @@ class DiscordBot(commands.Bot):
         Handles all action types: email, calendar, notes, tasks, etc.
         """
         try:
+            # Log a truncated excerpt of the raw webhook response for debugging
+            try:
+                raw_text = response.text
+            except Exception:
+                raw_text = ''
+
+            try:
+                max_log = 1000
+                snippet = raw_text if len(
+                    raw_text) <= max_log else raw_text[:max_log] + "\n... (truncated)"
+                self.logger.info(
+                    f"Webhook raw response (truncated to {max_log} chars): {snippet}")
+            except Exception:
+                # In case logging the raw text fails for any reason, still continue
+                self.logger.info("Webhook raw response: <unreadable>")
+
             data = response.json()
             self.logger.debug(f"Parsing webhook response, type: {type(data)}")
 
